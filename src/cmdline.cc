@@ -5,7 +5,7 @@
 #include <string>
 #include <cstdlib>
 #include <iostream>
-#include "cmdline.h"
+#include "../inc/cmdline.h"
 
 using namespace std;
 

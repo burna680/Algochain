@@ -5,12 +5,12 @@
 #include <iomanip>
 using namespace std;
 
-#include "Lista.h"
-#include "cmdline.h"
-#include "sha256.h"
-#include "block.h"
-#include "dictionary.h"
-#include "main.h"
+#include "../inc/Lista.h"
+#include "../inc/cmdline.h"
+#include "../inc/sha256.h"
+#include "../inc/block.h"
+#include "../inc/dictionary.h"
+#include "../inc/main.h"
 
 
 // agregar una variable global lista algochain static list<block> algochain;
