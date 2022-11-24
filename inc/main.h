@@ -1,5 +1,6 @@
-#ifndef MAIN_H
-#define MAIN_H
+#ifndef _MAIN_H_
+#define _MAIN_H_
+
 
 #include <fstream>
 #include <iomanip>
@@ -8,13 +9,24 @@
 #include <cstdlib>
 #include "cmdline.h"
 
+#include "Lista.h"
+#include "block.h"
+#include "Array.h"
+#include "user.h"
+
 using namespace std;
 
-/**************** Global elements ******************/
+
+/**************** Elementos globales ******************/
 static void opt_input(string const &);
 static void opt_output(string const &);
-static void opt_factor(string const &);
 static void opt_help(string const &);
+
+bool setAlgochainFromFile( istream *iss);
+bool refreshUsersFromBlock(block );
+block mempool;
+list <block> algochain;
+list <user> users;
 
 // Tabla de opciones de línea de comando. El formato de la tabla
 // consta de un elemento por cada opción a definir. A su vez, en
@@ -46,13 +58,11 @@ static void opt_help(string const &);
 static option_t options[] = {
 	{1, "i", "input", "-", opt_input, OPT_DEFAULT},
 	{1, "o", "output", "-", opt_output, OPT_DEFAULT},
-	{1, "d", "difficulty", NULL, opt_factor, OPT_MANDATORY},
 	{0, "h", "help", NULL, opt_help, OPT_DEFAULT},
 	{0, },
 };
 
 
-static int difficulty;
 static istream *iss = 0;	// Input Stream (clase para manejo de los flujos de entrada)
 static ostream *oss = 0;	// Output Stream (clase para manejo de los flujos de salida)
 static fstream ifs; 		// Input File Stream (derivada de la clase ifstream que deriva de istream para el manejo de archivos)
@@ -112,36 +122,213 @@ opt_output(string const &arg)
 }
 
 static void
-opt_factor(string const &arg)
-{
-	istringstream iss(arg);
-
-	// Intentamos extraer el factor de la línea de comandos.
-	// Para detectar argumentos que únicamente consistan de
-	// números enteros, vamos a verificar que EOF llegue justo
-	// después de la lectura exitosa del escalar.
-	//
-	if (!(iss >> difficulty) || !iss.eof() || difficulty<0) {
-		cerr << "Valor invalido de  dificultad: "
-		     << arg
-		     << "."
-		     << endl;
-		exit(1);
-	}
-
-	if (iss.bad()) {
-		cerr << "No se pudo leer la dificultad."
-		     << endl;
-		exit(1);
-	}
-}
-
-static void
 opt_help(string const &arg)
 {
-	cout << "cmdline -f factor [-i file] [-o file]"
+	cout << "Comands: \n"
+		 << "init <user> <value> <bits> \n"
+		 << "transfer <src> <dst1> <value1> ... <dstN> <valueN> \n"
+		 << "mine <bits> \n"
+		 << "balance <user> \n"
+		 << "block <id> \n"
+		 << "txn <id> \n"
+		 << "load <filename> \n"
+		 << "save <filename> \n"
+		 << "exit program \n"
 	     << endl;
 	exit(0);
 }
 
+bool setAlgochainFromFile( istream *iss_load)
+{
+	block block_aux, block_empty;
+	string str,str_aux;
+	size_t i = -1;//, aux = 0;
+	hdr header_aux;
+	size_t diff, nonce;
+	bdy body_aux;
+	getline(*iss_load, str, '\n');
+	if(str!=NULL_HASH)
+	{
+		cerr << "ERROR: No comienza con el genesis block" << endl;
+		exit (1); 
+	}
+	while (str!="")
+	{
+		//seteo el header
+		i++;
+		
+		if(isHash(str)==false)
+		{
+			cerr << "ERROR: no es un hash para prev block" << endl;
+			exit(1);
+		}
+		header_aux.setPrevBlock(str);
+		getline(*iss_load, str, '\n');
+		if(isHash(str)==false)
+		{
+			cerr << "ERROR: no es un hash para txns hash" << endl;
+			return false;
+		}
+		header_aux.setTxnsHash(str);
+		getline(*iss_load, str, '\n');
+		if(isNumber<size_t>(str)==0)
+		{
+			cerr<<"ERROR: no es un numero"<< endl;
+			return false;
+		}
+		diff = stoi(str);
+		header_aux.setBits(diff);
+		getline(*iss_load, str, '\n');
+		if(isNumber<size_t>(str)==0)
+		{
+			cerr<<"ERROR: no es un numero"<< endl;
+			return false;
+		}
+		nonce = stoi(str);
+		header_aux.setNonce(nonce);
+		
+		block_aux.setHeader(header_aux); //guarda el header
+		//seteo el body
+		str_aux=block_aux.setBody(iss_load);
+		// chequeo que sea genesis
+		if(i==0)
+		{
+			body_aux = block_aux.getBody();
+			if (body_aux.getTxnCount()!=1)
+			{
+				cerr << "ERROR: No comienza con el genesis block" << endl;
+				exit (1); 
+			}
+			Array <txn> txns_aux = body_aux.getTxns();
+			if(txns_aux[0].getNTxIn()!=1  || txns_aux[0].getNTxOut()!=1 )
+			{
+				cerr << "ERROR: No comienza con el genesis block" << endl;
+				exit (1); 
+			}
+			Array <inpt> tx_in_aux = txns_aux[0].getInputs();
+			outpnt outpoint = tx_in_aux[0].getOutPoint();
+			if(outpoint.tx_id!=NULL_HASH && outpoint.idx!=0)
+			{
+				cerr << "ERROR: No comienza con el genesis block" << endl;
+				exit (1); 
+			}
+		}
+		
+
+		if(isHash(str_aux)==true || str_aux=="")//volver a los if separadaros y ver si es break o continue se rompio mi crerbo
+		{
+			str=str_aux;
+			algochain.append(block_aux);
+			if(refreshUsersFromBlock(block_aux)==false)
+			{
+				cerr<< "ERROR: no se pueden cargar los users"<< endl;
+				exit(1);
+			}
+			break;
+		}
+		else if (str_aux=="OK")
+		{
+			algochain.append(block_aux);
+			if(refreshUsersFromBlock(block_aux)==false)
+			{
+				cerr<< "ERROR: no se pueden cargar los users"<< endl;
+				exit(1);
+			}
+			getline(*iss_load, str, '\n');			
+			continue;
+		}
+		else
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool refreshUsersFromBlock(block blck)
+{
+	bdy body = blck.getBody();
+	size_t txn_count = body.getTxnCount(), n_tx_in, n_tx_out;
+	Array <txn> txns = body.getTxns();
+	Array <inpt> inpts;
+	Array <outpt> outpts;
+	string addr;
+	list <string> address, empty_list;
+	for(size_t i =0 ; i < txn_count ; i++)
+	{
+		n_tx_in = txns[i].getNTxIn();
+		inpts = txns[i].getInputs();
+		
+		for (size_t j = 0; j < n_tx_in; j++)
+		{
+			if(j==0)
+			{
+				addr = inpts[j].getAddr();
+				continue;
+			}
+			else
+			{
+				if(inpts[j].getAddr()!=addr)
+				{
+					cerr << "ERROR: Addr en inputs es distinto" << endl;
+					return false;
+				}
+			}
+		}
+
+		if(users.find("checkUser",addr)!=FINDNT)
+		{
+			string str_user=users.find("user",addr);
+			user aux_user(str_user);
+			users.removeElement(aux_user);
+			aux_user.loadTxn( txns[i]);
+			users.append(aux_user);
+		}
+		else
+		{
+			if (addr != NULL_HASH )
+			{
+				user aux_user;
+				aux_user.setName(addr);
+				aux_user.loadTxn(txns[i]);
+				users.append(aux_user);
+			}
+		}
+		//con los outputs
+		n_tx_out = txns[i].getNTxOut();
+		outpts = txns[i].getOutputs();
+
+		for (size_t j = 0; j < n_tx_out; j++)
+		{
+			addr = outpts[j].getAddr();
+			if (addr ==inpts[0].getAddr() )
+			{
+			}
+			else if(address.contains(addr)==true)
+			{
+				cerr << "ERROR: Addr en outputs repetidas" << endl;
+				return false;
+			}
+			else if (address.contains(addr)!=true || users.find("checkUser",addr)==FINDNT)
+			{
+				addr = outpts[j].getAddr();
+				address.append(addr);
+				user aux_user;
+				aux_user.setName(addr);
+				aux_user.loadTxn(txns[i]);
+				users.append(aux_user);
+			}
+			else
+			{
+				string str_user=users.find("user",addr);
+				user aux_user(str_user);
+				users.removeElement(aux_user);
+				aux_user.loadTxn(txns[i]);
+				users.append(aux_user);
+			}	
+		}
+		address = empty_list;
+	}
+	return true;
+}
 #endif //MAIN_H
