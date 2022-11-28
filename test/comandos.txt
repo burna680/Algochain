@@ -1,0 +1,7 @@
+init lucas 100 1
+transfer lucas carla 10
+transfer lucas carla 10
+transfer carla fran 15
+mine 3
+save algochainout.txt
+exit 

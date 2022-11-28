@@ -7,6 +7,9 @@
 #include <sstream>
 #include <cstdlib>
 #include <bitset>
+#include "block.h"
+#include "Lista.h"
+#include "sha256.h"
 
 using namespace std;
 
@@ -16,7 +19,10 @@ string Hex2Bin(const string& s); // Transforma una cadena de caracteres que cont
 bool isHash(const string& str); // Confirma si str cumple con los requisitos minimos de un HASH
 bool isNumber(const string& s); // Revisa si s es un numero, implementado como template para distinguir si es int o double, etc...
 bool isError(const string& addr); // Se fija si en addr esta lo guardado en la variable ERROR
+Array<string> _merkle_hash(Array<string>& hashes, size_t n);
+string merkle_hash(Array<string>& hashes, size_t n);
 
+bool setAlgochainFromFile( istream *iss);
 
 bool isError(const string& addr)
 {
@@ -58,4 +64,31 @@ bool isNumber(const string& s) //Devuelve 1 si es true y 0 si es false
 	return((istringstream(s) >> n >> ws).eof());
 }
 
+
+string merkle_hash(Array<string>& hashes, size_t n)
+{
+	return _merkle_hash(hashes, n)[0];
+}
+Array<string> _merkle_hash(Array<string>& hashes, size_t n)
+{
+	if(n == 1)
+		return hashes;
+	
+	if(n%2 == 1)
+	{
+		if (hashes.getSize() <= n)
+		{
+			hashes.ArrayRedim(n+1);
+		}
+		hashes[n] = hashes[n-1];
+		n++;
+	}
+	Array<string> result(n/2);
+	size_t j;
+	for (size_t i = 0, j = 0; i < n/2, j < n; i++, j+=2)
+	{
+		result[i] = sha256(sha256(hashes[j] + hashes[j+1]));
+	}
+	return _merkle_hash(result, n/2);
+}
 #endif //TOOLS_H
